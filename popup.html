@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    width: 240px;
+    margin: 0;
+    padding: 12px;
+    background: #18191a;
+    color: #e4e6eb;
+    font-size: 13px;
+  }
+  h2 { margin: 0 0 10px; font-size: 14px; color: #e4e6eb; }
+  .status { color: #b0b3b8; margin-bottom: 10px; font-size: 12px; min-height: 16px; }
+  .status.ok { color: #42b72a; }
+  .status.err { color: #f02849; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  select {
+    flex: 1;
+    background: #3a3b3c;
+    color: #e4e6eb;
+    border: 1px solid #4e4f50;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  button {
+    flex: 1;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .btn-primary { background: #0866ff; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #0753d0; }
+  .btn-scroll { background: #3a3b3c; color: #e4e6eb; }
+  .btn-scroll:hover:not(:disabled) { background: #4e4f50; }
+  .btn-stop { background: #f02849; color: #fff; }
+  .hint { color: #8a8d91; font-size: 11px; line-height: 1.4; margin-top: 8px; border-top: 1px solid #3a3b3c; padding-top: 8px; }
+  #chat-name { font-weight: 600; color: #e4e6eb; margin-bottom: 6px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<h2>💬 Messenger Export</h2>
+<div id="chat-name">—</div>
+<div class="status" id="status">Opening chat...</div>
+
+<div class="row">
+  <select id="format">
+    <option value="json">JSON</option>
+    <option value="txt">Plain text</option>
+  </select>
+</div>
+
+<div class="row">
+  <button class="btn-primary" id="btn-export" disabled>Export visible</button>
+</div>
+<div class="row">
+  <button class="btn-scroll" id="btn-scroll" disabled>Scroll all + export</button>
+  <button class="btn-stop" id="btn-stop" style="display:none">Stop</button>
+</div>
+
+<div class="hint">
+  <b>Export visible</b> — exports messages currently loaded in chat.<br><br>
+  <b>Scroll all + export</b> — auto-scrolls to the top to load full history, then exports. May take a while for long chats.
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
