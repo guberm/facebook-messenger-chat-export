@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Generate Extension Icons</title>
+<style>
+  body { font-family: sans-serif; padding: 24px; background: #18191a; color: #e4e6eb; }
+  button { padding: 10px 20px; background: #0866ff; color: #fff; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  button:hover { background: #0753d0; }
+  #log { margin-top: 16px; font-size: 13px; color: #42b72a; }
+</style>
+</head>
+<body>
+<h2>Icon Generator</h2>
+<p style="margin-bottom:16px;color:#b0b3b8">Generates icon16.png, icon32.png, icon48.png, icon128.png<br>and saves them to your Downloads folder. Move them into the <code>icons/</code> folder.</p>
+<button onclick="generate()">Generate &amp; Download PNGs</button>
+<canvas id="c" style="display:none"></canvas>
+<div id="log"></div>
+<script>
+const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#0866ff"/>
+  <path fill="white" d="M16 26 Q16 14 28 14 H100 Q112 14 112 26 V80 Q112 92 100 92 H64 L44 112 V92 H28 Q16 92 16 80 Z"/>
+  <rect x="60" y="28" width="8" height="26" rx="3" fill="#0866ff"/>
+  <polygon points="46,54 82,54 64,72" fill="#0866ff"/>
+  <rect x="46" y="74" width="36" height="5" rx="2.5" fill="#0866ff"/>
+</svg>`;
+
+async function generate() {
+  const log = document.getElementById('log');
+  log.textContent = '';
+  for (const size of [16, 32, 48, 128]) {
+    await drawAndDownload(size);
+    await new Promise(r => setTimeout(r, 300));
+    log.textContent += `✓ icon${size}.png\n`;
+  }
+  log.textContent += '\nDone! Move the downloaded files into the icons/ folder, then reload the extension.';
+}
+
+async function drawAndDownload(size) {
+  const canvas = document.getElementById('c');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const blob = new Blob([SVG], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  ctx.clearRect(0, 0, size, size);
+  ctx.drawImage(img, 0, 0, size, size);
+  URL.revokeObjectURL(url);
+  await new Promise(res => canvas.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `icon${size}.png`;
+    a.click();
+    res();
+  }, 'image/png'));
+}
+</script>
+</body>
+</html>

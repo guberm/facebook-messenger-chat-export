@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Blue rounded background -->
+  <rect width="128" height="128" rx="24" fill="#0866ff"/>
+  <!-- White speech bubble with bottom-left tail -->
+  <path fill="white" d="
+    M16 26
+    Q16 14 28 14
+    H100 Q112 14 112 26
+    V80 Q112 92 100 92
+    H64 L44 112 V92
+    H28 Q16 92 16 80
+    Z
+  "/>
+  <!-- Download arrow (blue, centered in bubble) -->
+  <rect x="60" y="28" width="8" height="26" rx="3" fill="#0866ff"/>
+  <polygon points="46,54 82,54 64,72" fill="#0866ff"/>
+  <rect x="46" y="74" width="36" height="5" rx="2.5" fill="#0866ff"/>
+</svg>

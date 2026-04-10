@@ -113,6 +113,22 @@ function getTextWithEmoji(el) {
   return result.trim();
 }
 
+// True for shared photo images — not emoji, not tiny UI icons, not FB static sprites
+function isPhotoMessage(img) {
+  const alt = img.getAttribute('alt') || '';
+  if (/\p{Extended_Pictographic}/u.test(alt)) return false;
+  const src = img.src || '';
+  if (!src.startsWith('http')) return false;
+  if (src.includes('/rsrc.php')) return false;
+  const w = img.naturalWidth || img.offsetWidth;
+  if (w > 0 && w < 40) return false;
+  return true;
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function extractMessages() {
   const container = findChatContainer();
   if (!container) return [];
@@ -134,6 +150,7 @@ function extractMessages() {
 
     let sender = null;
     let timestamp = null;
+    let images = [];
 
     let probe = el.parentElement;
     for (let i = 0; i < 12; i++) {
@@ -147,9 +164,11 @@ function extractMessages() {
         if (match) {
           timestamp = match[1].trim();
           sender = match[2].trim();
-          break;
+        } else {
+          timestamp = clean;
         }
-        timestamp = clean;
+        images = Array.from(probe.querySelectorAll('img'))
+          .filter(isPhotoMessage).map(img => img.src);
         break;
       }
 
@@ -162,7 +181,7 @@ function extractMessages() {
       probe = probe.parentElement;
     }
 
-    raw.push({ sender, timestamp, text });
+    raw.push({ sender, timestamp, text, images });
   });
 
   // Second pass: filter noise, propagate sender/timestamp forward
@@ -187,13 +206,15 @@ function extractMessages() {
 
     const sender = item.sender || lastSender;
     const timestamp = item.timestamp || lastTimestamp;
-    const entry = { sender, timestamp, text };
+    const entry = { sender, timestamp, text, images: item.images || [] };
 
     if (textToIndex.has(text)) {
-      // Replace the existing entry only if it lacked a timestamp and this one has one
       const idx = textToIndex.get(text);
-      if (!messages[idx].timestamp && timestamp) {
+      const existing = messages[idx];
+      if (!existing.timestamp && timestamp) {
         messages[idx] = entry;
+      } else if (entry.images.length && !existing.images.length) {
+        messages[idx] = { ...existing, images: entry.images };
       }
     } else {
       textToIndex.set(text, messages.length);
@@ -248,6 +269,86 @@ function downloadText(messages, filename) {
   });
   const blob = new Blob([lines.join('\n\n')], { type: 'text/plain;charset=utf-8' });
   trigger(blob, filename + '.txt');
+}
+
+async function fetchAsDataURL(url) {
+  try {
+    const resp = await fetch(url, { credentials: 'include' });
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    return await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+  } catch { return null; }
+}
+
+async function downloadHTML(messages, filename) {
+  const name = getChatName();
+
+  // Fetch all unique photo URLs and embed as base64
+  const allUrls = [...new Set(messages.flatMap(m => m.images || []))];
+  const imgMap = new Map();
+  await Promise.all(allUrls.map(async url => {
+    const data = await fetchAsDataURL(url);
+    if (data) imgMap.set(url, data);
+  }));
+
+  const exportedAt = new Date().toLocaleString();
+
+  const rows = messages.map(m => {
+    const isMe = !m.sender || m.sender === 'You';
+    const cls = isMe ? 'me' : 'them';
+    const senderLabel = escapeHtml(m.sender || 'You');
+    const tsLabel = escapeHtml(m.timestamp || '');
+    const textHtml = m.text ? `<p>${escapeHtml(m.text).replace(/\n/g, '<br>')}</p>` : '';
+    const imgsHtml = (m.images || []).map(url =>
+      `<img src="${escapeHtml(imgMap.get(url) || url)}" class="msg-img">`
+    ).join('');
+    if (!textHtml && !imgsHtml) return '';
+    return `<div class="msg ${cls}"><div class="bubble">${textHtml}${imgsHtml}</div>` +
+           `<div class="meta">${senderLabel} &middot; ${tsLabel}</div></div>`;
+  }).filter(Boolean).join('\n');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(name)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#1c1e21}
+header{background:#fff;padding:12px 16px;border-bottom:1px solid #ddd;position:sticky;top:0;z-index:10}
+header h1{font-size:16px;margin-bottom:2px}
+header small{color:#65676b;font-size:12px}
+.chat{max-width:680px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:6px}
+.msg{display:flex;flex-direction:column;max-width:75%}
+.msg.me{align-self:flex-end;align-items:flex-end}
+.msg.them{align-self:flex-start;align-items:flex-start}
+.bubble{padding:8px 12px;border-radius:18px;line-height:1.5;word-break:break-word}
+.me .bubble{background:#0866ff;color:#fff;border-bottom-right-radius:4px}
+.them .bubble{background:#fff;color:#1c1e21;border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.bubble p{margin:0}
+.bubble p+p{margin-top:4px}
+.msg-img{max-width:100%;max-height:360px;border-radius:12px;display:block;margin-top:4px}
+.meta{font-size:11px;color:#65676b;margin-top:3px;padding:0 4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>${escapeHtml(name)}</h1>
+  <small>Exported ${exportedAt} · ${messages.length} messages</small>
+</header>
+<div class="chat">
+${rows}
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  trigger(blob, filename + '.html');
 }
 
 function trigger(blob, filename) {
@@ -355,13 +456,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
   }
 
   if (msg.action === 'export') {
-    const msgs = extractMessages()
-      .sort((a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp));
-    const fn = slug(getChatName()) + '-' + new Date().toISOString().slice(0, 10);
-    if (msg.format === 'json') downloadJSON(msgs, fn);
-    else downloadText(msgs, fn);
-    respond({ count: msgs.length });
-    return;
+    (async () => {
+      const msgs = extractMessages()
+        .sort((a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp));
+      const fn = slug(getChatName()) + '-' + new Date().toISOString().slice(0, 10);
+      if (msg.format === 'json') downloadJSON(msgs, fn);
+      else if (msg.format === 'html') await downloadHTML(msgs, fn);
+      else downloadText(msgs, fn);
+      respond({ count: msgs.length });
+    })();
+    return true;
   }
 
   if (msg.action === 'scroll_and_export') {
@@ -395,6 +499,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
         .sort((a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp));
       const fn = slug(getChatName()) + '-full-' + new Date().toISOString().slice(0, 10);
       if (msg.format === 'json') downloadJSON(msgs, fn);
+      else if (msg.format === 'html') await downloadHTML(msgs, fn);
       else downloadText(msgs, fn);
       respond({ count: msgs.length });
     })();
