@@ -151,9 +151,11 @@ function extractMessages() {
   });
 
   // Second pass: filter noise, propagate sender/timestamp forward
+  // Use a Map for deduplication so a timestamped version can replace an earlier
+  // timestamp-less one (sidebar previews appear first in the DOM without timestamps).
   const messages = [];
+  const textToIndex = new Map(); // text -> index in messages[]
   const chatName = getChatName();
-  const seenTexts = new Set();
   let lastSender = null;
   let lastTimestamp = null;
 
@@ -162,22 +164,31 @@ function extractMessages() {
     if (item.timestamp) lastTimestamp = item.timestamp;
 
     const text = item.text;
-    if (seenTexts.has(text)) continue;
     if (isNoise(text)) continue;
     // Skip chat title appearing as a text node
     if (text === chatName) continue;
     // Skip lone sender name (e.g., "Ekateryna" or "You" standing alone)
     if (text === lastSender || text === 'You') continue;
 
-    seenTexts.add(text);
-    messages.push({
-      sender: item.sender || lastSender,
-      timestamp: item.timestamp || lastTimestamp,
-      text,
-    });
+    const sender = item.sender || lastSender;
+    const timestamp = item.timestamp || lastTimestamp;
+    const entry = { sender, timestamp, text };
+
+    if (textToIndex.has(text)) {
+      // Replace the existing entry only if it lacked a timestamp and this one has one
+      const idx = textToIndex.get(text);
+      if (!messages[idx].timestamp && timestamp) {
+        messages[idx] = entry;
+      }
+    } else {
+      textToIndex.set(text, messages.length);
+      messages.push(entry);
+    }
   }
 
-  return messages;
+  // Drop anything that still has no timestamp — these are unresolvable sidebar
+  // previews that never matched a real message in the DOM.
+  return messages.filter(m => m.timestamp != null);
 }
 
 // ---- Auto-scroll ----
