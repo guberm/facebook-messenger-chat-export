@@ -98,6 +98,21 @@ function isNoise(text) {
   return NOISE.some(p => p.test(text));
 }
 
+// Extract visible text including emoji rendered as <img alt="😊">
+function getTextWithEmoji(el) {
+  let result = '';
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += node.textContent;
+    } else if (node.nodeName === 'IMG') {
+      result += node.getAttribute('alt') || '';
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      result += getTextWithEmoji(node);
+    }
+  }
+  return result.trim();
+}
+
 function extractMessages() {
   const container = findChatContainer();
   if (!container) return [];
@@ -106,7 +121,7 @@ function extractMessages() {
 
   const leafEls = allEls.filter(el => {
     if (el.querySelector('[dir="auto"]')) return false;
-    const text = el.innerText?.trim();
+    const text = getTextWithEmoji(el);
     if (!text || text.length > 2000) return false;
     if (el.closest('nav, header, aside, [role="navigation"], [role="complementary"], [role="banner"]')) return false;
     return true;
@@ -115,7 +130,7 @@ function extractMessages() {
   // First pass: collect with raw sender/timestamp
   const raw = [];
   leafEls.forEach(el => {
-    const text = el.innerText.trim();
+    const text = getTextWithEmoji(el);
 
     let sender = null;
     let timestamp = null;
