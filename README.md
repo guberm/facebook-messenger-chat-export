@@ -50,13 +50,15 @@ A Chrome extension to export Facebook Messenger chat history to JSON, plain text
 ```
 
 ### Plain text
-```
+
+```text
 [February 27] You: Hello 👋
 
 [February 27] Them: Hi there
 ```
 
 ### HTML
+
 A single `.html` file styled like Messenger with blue/white chat bubbles. Shared photos are fetched and embedded as base64 — the file is fully self-contained and viewable offline.
 
 ## Notes
