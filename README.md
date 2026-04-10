@@ -32,6 +32,7 @@ A Chrome extension to export Facebook Messenger chat history to JSON, plain text
 ## Output formats
 
 ### JSON
+
 ```json
 {
   "conversation": "Name",
