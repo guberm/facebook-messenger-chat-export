@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Facebook Messenger Chat Export",
-  "version": "1.8",
+  "version": "1.9",
   "description": "Export Messenger chat history to JSON, plain text, or self-contained HTML with images",
   "icons": {
     "16": "icons/icon16.png",

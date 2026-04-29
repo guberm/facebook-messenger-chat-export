@@ -43,20 +43,25 @@ function findMessageScrollable() {
 
   const startEl = chatLeaf || findChatContainer();
 
-  // Pass 1: walk up looking for scrollTop > 0 (most reliable)
+  // Collect all scrollable ancestors (innermost first), excluding nav/sidebar
+  const scrollables = [];
   let el = startEl;
   while (el && el !== document.documentElement) {
-    if (el.scrollTop > 0) return el;
+    if (!el.closest('nav, aside, [role="navigation"]')) {
+      const oy = window.getComputedStyle(el).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 100) {
+        scrollables.push(el);
+      }
+    }
     el = el.parentElement;
   }
 
-  // Pass 2: walk up looking for overflow:auto/scroll
-  el = startEl;
-  while (el && el !== document.documentElement) {
-    const oy = window.getComputedStyle(el).overflowY;
-    if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) return el;
-    el = el.parentElement;
-  }
+  // Prefer the innermost element that has actual scroll travel (scrollTop > 0)
+  const withScroll = scrollables.find(e => e.scrollTop > 0);
+  if (withScroll) return withScroll;
+
+  // Otherwise return the innermost scrollable with meaningful scroll range
+  if (scrollables.length > 0) return scrollables[0];
 
   return findChatContainer();
 }
@@ -485,11 +490,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       while (isScrolling) {
         addMessages();
         try { chrome.runtime.sendMessage({ action: 'scroll_progress' }); } catch(e) {}
-        scrollable.scrollTop = 0;
-        scrollable.dispatchEvent(new Event('scroll', { bubbles: true }));
-        await sleep(1500);
+        // Pin scrollTop=0 with an interval so Messenger's IntersectionObserver
+        // can detect the "load older messages" sentinel before React's scroll
+        // restoration overrides us.
+        const pinTop = setInterval(() => { scrollable.scrollTop = 0; }, 50);
+        await sleep(600);
+        clearInterval(pinTop);
+        // Wait for the network request + DOM update to complete
+        await sleep(2200);
         const h = scrollable.scrollHeight;
-        if (h === lastH) { stuck++; if (stuck >= 5) break; } else stuck = 0;
+        if (h === lastH) { stuck++; if (stuck >= 8) break; } else stuck = 0;
         lastH = h;
       }
       addMessages(); // final capture
