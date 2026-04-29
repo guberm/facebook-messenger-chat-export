@@ -23,45 +23,25 @@ function findChatContainer() {
   return document.querySelector('[role="main"]') || document.body;
 }
 
-// Find the actual scroll container — walk up from a real chat message leaf
+// Find the actual scroll container — full document scan (ancestor walk misses it)
 function findMessageScrollable() {
-  // Look for a leaf that has a "Message sent" accessibility label nearby
-  // (sidebar previews don't have this, only actual chat messages do)
-  const chatLeaf = Array.from(document.querySelectorAll('[dir="auto"]')).find(el => {
-    if (el.querySelector('[dir="auto"]')) return false;
-    const text = el.innerText?.trim();
-    if (!text || text.length < 3 || text.length > 500) return false;
-    if (el.closest('nav, header, aside, [role="navigation"]')) return false;
-    let p = el.parentElement;
-    for (let i = 0; i < 12; i++) {
-      if (!p || p === document.body) break;
-      if (p.querySelector('[aria-label*="Message sent"]')) return true;
-      p = p.parentElement;
+  const candidates = [];
+  document.querySelectorAll('*').forEach(el => {
+    if (el.closest('nav, aside, [role="navigation"]')) return;
+    const oy = window.getComputedStyle(el).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 100) {
+      candidates.push(el);
     }
-    return false;
   });
 
-  const startEl = chatLeaf || findChatContainer();
-
-  // Collect all scrollable ancestors (innermost first), excluding nav/sidebar
-  const scrollables = [];
-  let el = startEl;
-  while (el && el !== document.documentElement) {
-    if (!el.closest('nav, aside, [role="navigation"]')) {
-      const oy = window.getComputedStyle(el).overflowY;
-      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 100) {
-        scrollables.push(el);
-      }
-    }
-    el = el.parentElement;
-  }
-
-  // Prefer the innermost element that has actual scroll travel (scrollTop > 0)
-  const withScroll = scrollables.find(e => e.scrollTop > 0);
+  // Prefer element that already has scroll travel (scrollTop > 0)
+  const withScroll = candidates.find(e => e.scrollTop > 0);
   if (withScroll) return withScroll;
 
-  // Otherwise return the innermost scrollable with meaningful scroll range
-  if (scrollables.length > 0) return scrollables[0];
+  // Fall back to the element with the largest scrollable range
+  if (candidates.length > 0) {
+    return candidates.sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0];
+  }
 
   return findChatContainer();
 }
@@ -490,14 +470,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       while (isScrolling) {
         addMessages();
         try { chrome.runtime.sendMessage({ action: 'scroll_progress' }); } catch(e) {}
-        // Pin scrollTop=0 with an interval so Messenger's IntersectionObserver
-        // can detect the "load older messages" sentinel before React's scroll
-        // restoration overrides us.
-        const pinTop = setInterval(() => { scrollable.scrollTop = 0; }, 50);
-        await sleep(600);
+        // Pin scrollTop=0 at 30ms — fast enough to beat React scroll-restoration
+        // while keeping the IntersectionObserver sentinel visible long enough to fire.
+        const pinTop = setInterval(() => { scrollable.scrollTop = 0; }, 30);
+        await sleep(2000);
         clearInterval(pinTop);
-        // Wait for the network request + DOM update to complete
-        await sleep(2200);
+        // Wait for the network fetch + DOM update
+        await sleep(2000);
         const h = scrollable.scrollHeight;
         if (h === lastH) { stuck++; if (stuck >= 8) break; } else stuck = 0;
         lastH = h;
