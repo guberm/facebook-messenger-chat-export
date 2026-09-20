@@ -114,6 +114,10 @@ function escapeHtml(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function messageKey(message) {
+  return JSON.stringify([message.sender || '', message.timestamp || '', message.text]);
+}
+
 function extractMessages() {
   const container = findChatContainer();
   if (!container) return [];
@@ -173,7 +177,7 @@ function extractMessages() {
   // Use a Map for deduplication so a timestamped version can replace an earlier
   // timestamp-less one (sidebar previews appear first in the DOM without timestamps).
   const messages = [];
-  const textToIndex = new Map(); // text -> index in messages[]
+  const messageToIndex = new Map(); // sender+timestamp+text -> index in messages[]
   const chatName = getChatName();
   let lastSender = null;
   let lastTimestamp = null;
@@ -193,8 +197,9 @@ function extractMessages() {
     const timestamp = item.timestamp || lastTimestamp;
     const entry = { sender, timestamp, text, images: item.images || [] };
 
-    if (textToIndex.has(text)) {
-      const idx = textToIndex.get(text);
+    const key = messageKey(entry);
+    if (messageToIndex.has(key)) {
+      const idx = messageToIndex.get(key);
       const existing = messages[idx];
       if (!existing.timestamp && timestamp) {
         messages[idx] = entry;
@@ -202,7 +207,7 @@ function extractMessages() {
         messages[idx] = { ...existing, images: entry.images };
       }
     } else {
-      textToIndex.set(text, messages.length);
+      messageToIndex.set(key, messages.length);
       messages.push(entry);
     }
   }
@@ -352,7 +357,9 @@ function parseTimestamp(ts) {
     july:6,august:7,september:8,october:9,november:10,december:11,
     jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11
   };
-  const s = ts.toLowerCase().trim();
+  const s = ts.replace(/^\s*at\s+/i, '').replace(/\s+/g, ' ').toLowerCase().trim();
+  const absolute = Date.parse(s);
+  if (!Number.isNaN(absolute)) return absolute;
   const parseTime = (h, m, ampm) => {
     let hh = parseInt(h), mm = parseInt(m);
     if (ampm === 'pm' && hh < 12) hh += 12;
@@ -461,7 +468,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       const collected = new Map(); // key = sender+timestamp+text
       const addMessages = () => {
         extractMessages().forEach(m => {
-          const key = (m.sender || '') + '|' + (m.timestamp || '') + '|' + m.text;
+          const key = messageKey(m);
           if (!collected.has(key)) collected.set(key, m);
         });
       };
